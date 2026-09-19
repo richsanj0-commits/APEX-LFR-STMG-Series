@@ -46,15 +46,15 @@ bool isBlackLine = 1;
 unsigned int numSensors = 8;
 // ------------------------------------------------------------
 
-// -------- Speed & PID Settings (High Performance) -----------
-int lfSpeed = 110;            // Target cruise speed
-int currentSpeed = 40;        // Starting acceleration speed
+// -------- Speed & PID Settings (Smooth & Stable) ------------
+int lfSpeed = 100;            // Normal cruise speed
+int currentSpeed = 30;        // Smooth acceleration start
 // S0 (Left: +8) ... S7 (Right: -8)
 int sensorWeight[8] = { 8, 4, 2, 1, -1, -2, -4, -8 };
 
-float Kp = 0.080f;            // Proportional gain for responsive turns
+float Kp = 0.030f;            // Restored normal P gain for smooth tracking
 float Ki = 0.000f;
-float Kd = 0.350f;            // Derivative gain to prevent overshoot
+float Kd = 0.200f;            // Matched D gain for clean damping
 
 int P, D, I, previousError, PIDvalue;
 double error;
@@ -317,7 +317,6 @@ void readLine() {
   for (int i = 0; i < 8; i++) {
     uint16_t raw = analogRead(SENSOR_PINS[i]);
 
-    // Inversed mapping as requested (map raw from minValues..maxValues to 0..1000)
     if (isBlackLine) {
       sensorValue[i] = map(raw, minValues[i], maxValues[i], 0, 1000);
     } else {
