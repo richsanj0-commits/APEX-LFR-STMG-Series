@@ -45,22 +45,26 @@ State current_state = STATE_SHOW_BINARY;
 
 // Motor Functions
 void motor_forward() {
+  // Left Motor Forward
   digitalWrite(BIN1, LOW);
   digitalWrite(BIN2, HIGH);
   analogWrite(PWMB, 150);
 
-  digitalWrite(AIN1, HIGH);
-  digitalWrite(AIN2, LOW);
+  // Right Motor Forward (AIN polarity inverted to match physical direction)
+  digitalWrite(AIN1, LOW);
+  digitalWrite(AIN2, HIGH);
   analogWrite(PWMA, 150);
 }
 
 void motor_backward() {
+  // Left Motor Backward
   digitalWrite(BIN1, HIGH);
   digitalWrite(BIN2, LOW);
   analogWrite(PWMB, 150);
 
-  digitalWrite(AIN1, LOW);
-  digitalWrite(AIN2, HIGH);
+  // Right Motor Backward (AIN polarity inverted to match physical direction)
+  digitalWrite(AIN1, HIGH);
+  digitalWrite(AIN2, LOW);
   analogWrite(PWMA, 150);
 }
 
