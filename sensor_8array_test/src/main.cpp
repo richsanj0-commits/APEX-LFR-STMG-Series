@@ -31,7 +31,7 @@
 // ------------------------------------------------------------
 
 // -------- 8-Channel Analog IR Sensors (Port A) --------------
-// Inverted physical pin order so S0 is LEFT-MOST and S7 is RIGHT-MOST
+// Left-to-right physical alignment: S0=PA7 ... S7=PA0
 const int SENSOR_PINS[8] = { PA7, PA6, PA5, PA4, PA3, PA2, PA1, PA0 };
 // ------------------------------------------------------------
 
@@ -42,8 +42,6 @@ U8G2_SSD1306_128X32_UNIVISION_F_SW_I2C u8g2(U8G2_R0, OLED_SCL, OLED_SDA, U8X8_PI
 // ------------------------------------------------------------
 
 // -------- Line Details --------------------------------------
-// 1 = Black line on white floor (Line=1, Floor=0)
-// 0 = White line on black floor
 bool isBlackLine = 1;
 unsigned int numSensors = 8;
 // ------------------------------------------------------------
@@ -122,7 +120,6 @@ void setup() {
   Serial.println("  - PB4:  Jog backward (while idle)");
   Serial.println("  - PB3:  RESET / EMERGENCY STOP");
   Serial.println("Layout: S0=LEFT-MOST [PA7] ... S7=RIGHT-MOST [PA0]");
-  Serial.println("Polarity: 1 = BLACK LINE, 0 = WHITE FLOOR");
   Serial.println("Target Speed: " + String(lfSpeed) + " | Kp: " + String(Kp, 3) + " | Kd: " + String(Kd, 3));
   Serial.println("==================================================\n");
 }
@@ -165,7 +162,7 @@ void loop() {
       lastIdleDisp = millis();
       updateOLED(isCalibrated ? "READY | PB5:START" : "PC13:CAL | PB5:START");
       char logBuf[100];
-      snprintf(logBuf, sizeof(logBuf), "IDLE | BIN:[%d%d%d%d%d%d%d%d] (1=LINE, 0=FLOOR)",
+      snprintf(logBuf, sizeof(logBuf), "IDLE | BIN:[%d%d%d%d%d%d%d%d]",
         sensorArray[0], sensorArray[1], sensorArray[2], sensorArray[3],
         sensorArray[4], sensorArray[5], sensorArray[6], sensorArray[7]);
       Serial.println(logBuf);
@@ -320,18 +317,11 @@ void readLine() {
   for (int i = 0; i < 8; i++) {
     uint16_t raw = analogRead(SENSOR_PINS[i]);
 
-    // On this sensor array:
-    // Black Line = Lower ADC reading (near minValues)
-    // White Floor = Higher ADC reading (near maxValues)
-    //
-    // Mapping:
-    // When isBlackLine == 1:
-    //   raw == minValues (Black) -> maps to 1000 (1: Black Line Detected!)
-    //   raw == maxValues (White) -> maps to 0    (0: White Floor)
+    // Inversed mapping as requested (map raw from minValues..maxValues to 0..1000)
     if (isBlackLine) {
-      sensorValue[i] = map(raw, minValues[i], maxValues[i], 1000, 0);
-    } else {
       sensorValue[i] = map(raw, minValues[i], maxValues[i], 0, 1000);
+    } else {
+      sensorValue[i] = map(raw, minValues[i], maxValues[i], 1000, 0);
     }
 
     sensorValue[i] = constrain(sensorValue[i], 0, 1000);
@@ -401,9 +391,9 @@ void updateOLED(const char* status) {
     int x = i * 16 + 2;
     int y = 22;
     if (sensorArray[i]) {
-      u8g2.drawBox(x, y, 12, 10);    // Solid filled block for Black line (1)
+      u8g2.drawBox(x, y, 12, 10);    // Solid filled block
     } else {
-      u8g2.drawFrame(x, y, 12, 10);  // Hollow outline for White floor (0)
+      u8g2.drawFrame(x, y, 12, 10);  // Hollow outline
     }
   }
   u8g2.sendBuffer();
