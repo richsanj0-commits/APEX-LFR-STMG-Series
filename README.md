@@ -177,14 +177,19 @@ The complete competitive firmware running the robot during trials and races:
 * **`src/motors.cpp`**: TB6612 motor direction and PWM generation.
 * **`src/display.cpp` & `src/menu.cpp`**: Multi-page interactive UI for on-field parameter adjustments without a computer.
 
-### Project B: `sensor_8array_test` (Bench Verification)
-A standalone validation program used to test analog sensor response, calibration, and noise margins without the multiplexer:
+### Project B: `sensor_8array_test` (Bench Verification & Wheel Direction Test)
+A standalone validation program used to test analog sensor response, calibration, noise margins, and wheel motor directions without the multiplexer:
 * **Pinout:** 8 analog sensors directly connected to `PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7`.
-* **Buttons:** `PC13` initiates 10-second sweep calibration; `PB5` toggles 0/1 binary visualization mode.
+* **Wheel Control & Buttons:**
+  * **`PB5`**: Press & hold &rarr; **Both wheels move FORWARD**.
+  * **`PB4`**: Press & hold &rarr; **Both wheels move BACKWARD**.
+  * **Release**: Wheels **STOP** immediately.
+  * **`PC13`**: Initiates 10-second sweep calibration over black line and white floor.
+* **Motors:** TB6612FNG driver mapped with Left Motor (`PB10`, `PB11`, `PA9`) and Right Motor (`PB0`, `PB1`, `PA8`) with polarity configured for forward rotation.
 * **Display:** SSD1306 OLED on `PB6` (SCL) and `PB7` (SDA).
 * **Operation:**
-  1. Sweep sensors across white floor and black line to establish midpoint thresholds $\text{Mid} = \frac{\text{Min} + \text{Max}}{2}$.
-  2. Live binary mode renders real-time `0` (white) / `1` (black) telemetry to the Serial Monitor and draws filled/hollow indicator blocks on the OLED screen.
+  1. Sweep sensors across white floor and black line during calibration to establish midpoint thresholds $\text{Mid} = \frac{\text{Min} + \text{Max}}{2}$.
+  2. Live binary mode renders real-time `0` (white) / `1` (black) telemetry to Serial Monitor (115200 baud) and draws filled/hollow indicator blocks on the OLED screen while jogging the wheels.
 
 ---
 
