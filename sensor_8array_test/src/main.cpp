@@ -6,8 +6,9 @@
   Simple Autonomous 8-Channel Line Follower Robot (LF-2 Style)
   Target MCU: STM32G431CB (170MHz)
   Controls:
-    - PC13: Calibrate
+    - PC13: Calibrate (8 seconds)
     - PB5:  Start line following
+    - PB4:  Jog backward bench test (when idle)
     - PB3:  Reset / Emergency Stop
   ============================================================
 */
@@ -25,6 +26,7 @@
 // -------- Pushbuttons (Active LOW with internal pull-up) -----
 #define BTN_CALIBRATE PC13   // PC13 for calibration
 #define BTN_START     PB5    // PB5 for start
+#define BTN_JOG_REV   PB4    // PB4 for backward jog
 #define BTN_RESET     PB3    // PB3 for reset / stop
 // ------------------------------------------------------------
 
@@ -39,18 +41,20 @@ U8G2_SSD1306_128X32_UNIVISION_F_SW_I2C u8g2(U8G2_R0, OLED_SCL, OLED_SDA, U8X8_PI
 // ------------------------------------------------------------
 
 // -------- Line Details --------------------------------------
-bool isBlackLine = 1;         // 1 = Black line, 0 = White line
+// 1 = Black line on white floor (Line=1, Floor=0)
+// 0 = White line on black floor
+bool isBlackLine = 1;
 unsigned int numSensors = 8;
 // ------------------------------------------------------------
 
 // -------- Speed & PID Settings (High Performance) -----------
-int lfSpeed = 110;            // Target cruise speed (increased for fast following)
+int lfSpeed = 110;            // Target cruise speed
 int currentSpeed = 40;        // Starting acceleration speed
 int sensorWeight[8] = { 8, 4, 2, 1, -1, -2, -4, -8 };
 
-float Kp = 0.080f;            // Increased P gain for sharper turning response
+float Kp = 0.080f;            // Proportional gain for responsive turns
 float Ki = 0.000f;
-float Kd = 0.350f;            // Damping gain to prevent oscillations
+float Kd = 0.350f;            // Derivative gain to prevent overshoot
 
 int P, D, I, previousError, PIDvalue;
 double error;
@@ -74,7 +78,7 @@ void setup() {
   // Set ADC to 12-bit resolution (0 - 4095)
   analogReadResolution(12);
 
-  // Sensor pin configuration
+  // Sensor pin configuration & default threshold baselines
   for (int i = 0; i < 8; i++) {
     pinMode(SENSOR_PINS[i], INPUT_ANALOG);
     minValues[i] = 1000;
@@ -95,6 +99,7 @@ void setup() {
   // Buttons with internal pullups
   pinMode(BTN_CALIBRATE, INPUT_PULLUP);
   pinMode(BTN_START,     INPUT_PULLUP);
+  pinMode(BTN_JOG_REV,   INPUT_PULLUP);
   pinMode(BTN_RESET,     INPUT_PULLUP);
 
   // Motors initially stopped
@@ -107,13 +112,15 @@ void setup() {
   updateOLED("PC13:CAL | PB5:START");
 
   Serial.println("\n==================================================");
-  Serial.println("  8-Sensor PID Line Follower (LF-2 Simplified)    ");
+  Serial.println("  8-Sensor PID Line Follower (LF-2 Style)         ");
   Serial.println("==================================================");
   Serial.println("Controls:");
-  Serial.println("  - PC13: Calibrate sensors (sweep over black/white)");
+  Serial.println("  - PC13: Calibrate sensors (8s sweep over line & floor)");
   Serial.println("  - PB5:  START line following");
-  Serial.println("  - PB3:  RESET / STOP");
-  Serial.println("Target Cruise Speed: " + String(lfSpeed));
+  Serial.println("  - PB4:  Jog backward (while idle)");
+  Serial.println("  - PB3:  RESET / EMERGENCY STOP");
+  Serial.println("Polarity: 1 = BLACK LINE, 0 = WHITE FLOOR");
+  Serial.println("Target Speed: " + String(lfSpeed) + " | Kp: " + String(Kp, 3) + " | Kd: " + String(Kd, 3));
   Serial.println("==================================================\n");
 }
 
@@ -122,23 +129,46 @@ void loop() {
   motor2run(0);
   currentSpeed = 30;
 
-  updateOLED(isCalibrated ? "READY | PB5:START" : "PC13:CAL | PB5:START");
-
-  // Wait for user action: PC13 to calibrate or PB5 to start
+  // Wait / Idle loop: live sensor view, calibration, or start
   while (1) {
+    // 1. Check PC13 Calibration
     if (digitalRead(BTN_CALIBRATE) == LOW) {
       delay(200);
       while (digitalRead(BTN_CALIBRATE) == LOW) delay(10);
       calibrate();
-      updateOLED("READY | PB5:START");
     }
 
+    // 2. Check PB5 Start
     if (digitalRead(BTN_START) == LOW) {
       delay(200);
       while (digitalRead(BTN_START) == LOW) delay(10);
-      break; // Exit wait loop and start running!
+      break; // Start line following!
     }
-    delay(20);
+
+    // 3. PB4 Jog backward bench test
+    if (digitalRead(BTN_JOG_REV) == LOW) {
+      motor1run(-100);
+      motor2run(-100);
+    } else {
+      motor1run(0);
+      motor2run(0);
+    }
+
+    // 4. Live sensor reading and telemetry during idle
+    readLine();
+
+    static unsigned long lastIdleDisp = 0;
+    if (millis() - lastIdleDisp >= 120) {
+      lastIdleDisp = millis();
+      updateOLED(isCalibrated ? "READY | PB5:START" : "PC13:CAL | PB5:START");
+      char logBuf[100];
+      snprintf(logBuf, sizeof(logBuf), "IDLE | BIN:[%d%d%d%d%d%d%d%d] (1=LINE, 0=FLOOR)",
+        sensorArray[0], sensorArray[1], sensorArray[2], sensorArray[3],
+        sensorArray[4], sensorArray[5], sensorArray[6], sensorArray[7]);
+      Serial.println(logBuf);
+    }
+
+    delay(10);
   }
 
   Serial.println(">>> LINE FOLLOWING STARTED! <<<");
@@ -158,12 +188,12 @@ void loop() {
       updateOLED("STOPPED / RESET");
       delay(600);
       while (digitalRead(BTN_RESET) == LOW) delay(10);
-      break; // Returns to main setup/wait state
+      break; // Return to idle state
     }
 
     readLine();
 
-    // Smooth speed ramp up to safe cruise speed
+    // Smooth speed ramp up to cruise speed
     if (currentSpeed < lfSpeed) {
       currentSpeed++;
     }
@@ -184,13 +214,13 @@ void loop() {
       }
     }
 
-    // Telemetry display periodically
+    // Periodic telemetry
     static unsigned long lastDisp = 0;
     if (millis() - lastDisp >= 100) {
       lastDisp = millis();
       updateOLED("FOLLOWING LINE");
       char logBuf[100];
-      snprintf(logBuf, sizeof(logBuf), "BIN:[%d%d%d%d%d%d%d%d] Err:%+d Spd:%d L:%d R:%d",
+      snprintf(logBuf, sizeof(logBuf), "FOLLOW | BIN:[%d%d%d%d%d%d%d%d] Err:%+d Spd:%d L:%d R:%d",
         sensorArray[0], sensorArray[1], sensorArray[2], sensorArray[3],
         sensorArray[4], sensorArray[5], sensorArray[6], sensorArray[7],
         (int)error, currentSpeed, lsp, rsp);
@@ -287,11 +317,18 @@ void readLine() {
   for (int i = 0; i < 8; i++) {
     uint16_t raw = analogRead(SENSOR_PINS[i]);
 
-    // Inverted so 1 = BLACK LINE and 0 = WHITE FLOOR
+    // On this sensor array:
+    // Black Line = Lower ADC reading (near minValues)
+    // White Floor = Higher ADC reading (near maxValues)
+    //
+    // Mapping:
+    // When isBlackLine == 1:
+    //   raw == minValues (Black) -> maps to 1000 (1: Black Line Detected!)
+    //   raw == maxValues (White) -> maps to 0    (0: White Floor)
     if (isBlackLine) {
-      sensorValue[i] = map(raw, minValues[i], maxValues[i], 0, 1000);
-    } else {
       sensorValue[i] = map(raw, minValues[i], maxValues[i], 1000, 0);
+    } else {
+      sensorValue[i] = map(raw, minValues[i], maxValues[i], 0, 1000);
     }
 
     sensorValue[i] = constrain(sensorValue[i], 0, 1000);
@@ -351,16 +388,19 @@ void updateOLED(const char* status) {
   u8g2.drawStr(0, 8, status);
 
   char buf[32];
-  snprintf(buf, sizeof(buf), "Spd:%d  Err:%+d", currentSpeed, (int)error);
+  snprintf(buf, sizeof(buf), "D:%d%d%d%d%d%d%d%d Spd:%d",
+    sensorArray[0], sensorArray[1], sensorArray[2], sensorArray[3],
+    sensorArray[4], sensorArray[5], sensorArray[6], sensorArray[7],
+    currentSpeed);
   u8g2.drawStr(0, 19, buf);
 
   for (int i = 0; i < 8; i++) {
     int x = i * 16 + 2;
     int y = 22;
     if (sensorArray[i]) {
-      u8g2.drawBox(x, y, 12, 10);    // Solid block for Black line
+      u8g2.drawBox(x, y, 12, 10);    // Solid filled block for Black line (1)
     } else {
-      u8g2.drawFrame(x, y, 12, 10);  // Hollow outline for White
+      u8g2.drawFrame(x, y, 12, 10);  // Hollow outline for White floor (0)
     }
   }
   u8g2.sendBuffer();
