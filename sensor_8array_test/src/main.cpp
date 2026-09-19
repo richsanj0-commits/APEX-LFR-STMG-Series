@@ -31,7 +31,8 @@
 // ------------------------------------------------------------
 
 // -------- 8-Channel Analog IR Sensors (Port A) --------------
-const int SENSOR_PINS[8] = { PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7 };
+// Inverted physical pin order so S0 is LEFT-MOST and S7 is RIGHT-MOST
+const int SENSOR_PINS[8] = { PA7, PA6, PA5, PA4, PA3, PA2, PA1, PA0 };
 // ------------------------------------------------------------
 
 // -------- OLED Display (SSD1306 via SW I2C on PB6/PB7) ------
@@ -50,6 +51,7 @@ unsigned int numSensors = 8;
 // -------- Speed & PID Settings (High Performance) -----------
 int lfSpeed = 110;            // Target cruise speed
 int currentSpeed = 40;        // Starting acceleration speed
+// S0 (Left: +8) ... S7 (Right: -8)
 int sensorWeight[8] = { 8, 4, 2, 1, -1, -2, -4, -8 };
 
 float Kp = 0.080f;            // Proportional gain for responsive turns
@@ -119,6 +121,7 @@ void setup() {
   Serial.println("  - PB5:  START line following");
   Serial.println("  - PB4:  Jog backward (while idle)");
   Serial.println("  - PB3:  RESET / EMERGENCY STOP");
+  Serial.println("Layout: S0=LEFT-MOST [PA7] ... S7=RIGHT-MOST [PA0]");
   Serial.println("Polarity: 1 = BLACK LINE, 0 = WHITE FLOOR");
   Serial.println("Target Speed: " + String(lfSpeed) + " | Kp: " + String(Kp, 3) + " | Kd: " + String(Kd, 3));
   Serial.println("==================================================\n");
