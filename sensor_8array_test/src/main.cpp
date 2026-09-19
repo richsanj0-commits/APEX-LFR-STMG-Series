@@ -43,14 +43,14 @@ bool isBlackLine = 1;         // 1 = Black line, 0 = White line
 unsigned int numSensors = 8;
 // ------------------------------------------------------------
 
-// -------- Speed & PID Settings (Reduced Safe Speed) ---------
-int lfSpeed = 70;             // Target cruise speed (reduced for smooth following)
-int currentSpeed = 30;        // Starting acceleration speed
+// -------- Speed & PID Settings (High Performance) -----------
+int lfSpeed = 110;            // Target cruise speed (increased for fast following)
+int currentSpeed = 40;        // Starting acceleration speed
 int sensorWeight[8] = { 8, 4, 2, 1, -1, -2, -4, -8 };
 
-float Kp = 0.045f;
+float Kp = 0.080f;            // Increased P gain for sharper turning response
 float Ki = 0.000f;
-float Kd = 0.280f;
+float Kd = 0.350f;            // Damping gain to prevent oscillations
 
 int P, D, I, previousError, PIDvalue;
 double error;
@@ -236,7 +236,7 @@ void linefollow() {
 // -------- Calibration Routine (PC13) ------------------------
 void calibrate() {
   updateOLED("CALIBRATING...");
-  Serial.println("\n>>> CALIBRATING SENSORS (4 Seconds) <<<");
+  Serial.println("\n>>> CALIBRATING SENSORS (8 Seconds - 2x) <<<");
   Serial.println("Sweep robot across white floor and black line...");
 
   for (int i = 0; i < 8; i++) {
@@ -246,7 +246,7 @@ void calibrate() {
   }
 
   unsigned long calStart = millis();
-  while (millis() - calStart < 4000) {
+  while (millis() - calStart < 8000) {
     // Slowly rotate to scan line automatically
     motor1run(50);
     motor2run(-50);
