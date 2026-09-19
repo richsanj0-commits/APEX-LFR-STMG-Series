@@ -227,8 +227,10 @@ void loop() {
           lfSpeed = constrain(lfSpeed + 5, 30, 220);
         } else if (editParamIndex == MENU_KP) {
           Kp = constrain(Kp + 0.010f, 0.000f, 0.500f);
+          Kp = roundf(Kp * 1000.0f) / 1000.0f;
         } else if (editParamIndex == MENU_KD) {
           Kd = constrain(Kd + 0.100f, 0.000f, 2.000f);
+          Kd = roundf(Kd * 1000.0f) / 1000.0f;
         }
         drawEditParam();
       }
@@ -239,8 +241,10 @@ void loop() {
           lfSpeed = constrain(lfSpeed - 5, 30, 220);
         } else if (editParamIndex == MENU_KP) {
           Kp = constrain(Kp - 0.010f, 0.000f, 0.500f);
+          Kp = roundf(Kp * 1000.0f) / 1000.0f;
         } else if (editParamIndex == MENU_KD) {
           Kd = constrain(Kd - 0.100f, 0.000f, 2.000f);
+          Kd = roundf(Kd * 1000.0f) / 1000.0f;
         }
         drawEditParam();
       }
@@ -532,9 +536,9 @@ void drawMenu() {
     } else if (idx == MENU_SPEED) {
       snprintf(lineBuf, sizeof(lineBuf), "%c 3.SPEED: %d", prefix, lfSpeed);
     } else if (idx == MENU_KP) {
-      snprintf(lineBuf, sizeof(lineBuf), "%c 4.Kp: %.3f", prefix, Kp);
+      snprintf(lineBuf, sizeof(lineBuf), "%c 4.Kp: %s", prefix, String(Kp, 3).c_str());
     } else if (idx == MENU_KD) {
-      snprintf(lineBuf, sizeof(lineBuf), "%c 5.Kd: %.3f", prefix, Kd);
+      snprintf(lineBuf, sizeof(lineBuf), "%c 5.Kd: %s", prefix, String(Kd, 3).c_str());
     } else if (idx == MENU_SENSORS) {
       snprintf(lineBuf, sizeof(lineBuf), "%c 6.SENSOR TEST", prefix);
     }
@@ -557,10 +561,10 @@ void drawEditParam() {
     snprintf(valBuf, sizeof(valBuf), "<  %d  >", lfSpeed);
   } else if (editParamIndex == MENU_KP) {
     snprintf(titleBuf, sizeof(titleBuf), "TUNE Kp (+/-0.01)");
-    snprintf(valBuf, sizeof(valBuf), "<  %.3f  >", Kp);
+    snprintf(valBuf, sizeof(valBuf), "<  %s  >", String(Kp, 3).c_str());
   } else if (editParamIndex == MENU_KD) {
     snprintf(titleBuf, sizeof(titleBuf), "TUNE Kd (+/-0.1)");
-    snprintf(valBuf, sizeof(valBuf), "<  %.3f  >", Kd);
+    snprintf(valBuf, sizeof(valBuf), "<  %s  >", String(Kd, 3).c_str());
   }
 
   u8g2.drawStr(0, 9, titleBuf);
@@ -681,18 +685,22 @@ void handleSerial() {
       drawMenu();
     } else if (c == 'p') {
       Kp = constrain(Kp + 0.010f, 0.000f, 0.500f);
+      Kp = roundf(Kp * 1000.0f) / 1000.0f;
       Serial.println("Kp: " + String(Kp, 3));
       drawMenu();
     } else if (c == 'P') {
       Kp = constrain(Kp - 0.010f, 0.000f, 0.500f);
+      Kp = roundf(Kp * 1000.0f) / 1000.0f;
       Serial.println("Kp: " + String(Kp, 3));
       drawMenu();
     } else if (c == 'd') {
       Kd = constrain(Kd + 0.100f, 0.000f, 2.000f);
+      Kd = roundf(Kd * 1000.0f) / 1000.0f;
       Serial.println("Kd: " + String(Kd, 3));
       drawMenu();
     } else if (c == 'D') {
       Kd = constrain(Kd - 0.100f, 0.000f, 2.000f);
+      Kd = roundf(Kd * 1000.0f) / 1000.0f;
       Serial.println("Kd: " + String(Kd, 3));
       drawMenu();
     }
