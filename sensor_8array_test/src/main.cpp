@@ -186,9 +186,15 @@ void loop() {
 
     // Telemetry display periodically
     static unsigned long lastDisp = 0;
-    if (millis() - lastDisp >= 120) {
+    if (millis() - lastDisp >= 100) {
       lastDisp = millis();
       updateOLED("FOLLOWING LINE");
+      char logBuf[100];
+      snprintf(logBuf, sizeof(logBuf), "BIN:[%d%d%d%d%d%d%d%d] Err:%+d Spd:%d L:%d R:%d",
+        sensorArray[0], sensorArray[1], sensorArray[2], sensorArray[3],
+        sensorArray[4], sensorArray[5], sensorArray[6], sensorArray[7],
+        (int)error, currentSpeed, lsp, rsp);
+      Serial.println(logBuf);
     }
 
     delay(1);
@@ -281,13 +287,11 @@ void readLine() {
   for (int i = 0; i < 8; i++) {
     uint16_t raw = analogRead(SENSOR_PINS[i]);
 
-    // On this sensor array:
-    // Black Line = Low ADC reading (near minValues)
-    // White Floor = High ADC reading (near maxValues)
+    // Inverted so 1 = BLACK LINE and 0 = WHITE FLOOR
     if (isBlackLine) {
-      sensorValue[i] = map(raw, minValues[i], maxValues[i], 1000, 0);
-    } else {
       sensorValue[i] = map(raw, minValues[i], maxValues[i], 0, 1000);
+    } else {
+      sensorValue[i] = map(raw, minValues[i], maxValues[i], 1000, 0);
     }
 
     sensorValue[i] = constrain(sensorValue[i], 0, 1000);
