@@ -62,8 +62,10 @@ voltage (702 at 0 µs settle → 214 at 50 µs, still falling), i.e. nothing act
 **Most likely cause: pull-up RD1 / RD9 open** (unsoldered, cracked joint, or wrong value).
 Check: on black, the sensor output should measure ~2.8 V like the working channels.
 
-Until repaired, both are disabled in firmware (`SENSOR_DEAD`). With a 30 mm line, 3–4 sensors always see
-the line, so the S8 gap causes no blind spot (verified in the slide test).
+With a 30 mm line, 3–4 sensors always see the line, so the S8 gap caused no blind spot while it was disabled.
+
+**Fixed 2026-10-08:** RD1 and RD9 re-soldered. Hand calibration afterwards: S0 white 269 / black 3691
+(range 3422), S8 white 323 / black 3638 (range 3315), now among the best channels. Both re-enabled.
 
 ## 4. ADC timing and MUX settling
 
@@ -100,8 +102,12 @@ Position noise is well under 0.1 mm, so only a light low-pass on the D term is n
 
 ## 7. Open items
 
-- [ ] Repair RD1 / RD9, then set `SENSOR_DEAD` back to `false` for S0 and S8.
-- [ ] Wheels-up direction check with the corrected gains (line left → left wheel slows).
+- [x] Repair RD1 / RD9, then set `SENSOR_DEAD` back to `false` for S0 and S8 (done 2026-10-08, see §3).
+- [x] Wheels-up direction check: line left → L = −30 / R = 255, line right → L = 255 / R = −30, centred → L ≈ R ≈ 60.
+- [x] First track runs: Kp 6.5 overshot both ways → defaults lowered to Kp 3.5 / Kd 30. Averaging two line pieces at a
+      junction drove onto white → segment selection added (NEAREST keeps straight through 3-way splits).
+- [x] Track has both black-on-white and white-on-black sections → automatic line colour detection added.
+- [ ] Verify colour switching and 3-way splits on the track with the latest firmware.
 - [ ] Confirm button pins: `apex_lfr` / `sensor_14array_test` use BACK=PB5, UP=PB3; `line_follower_mux14` has them swapped.
 - [ ] Tune Kp / Kd / speed on track.
 - [ ] Optionally store calibration and gains in flash so they survive a reset.

@@ -19,6 +19,8 @@
   Serial (115200): r=run x=stop c=calibrate(spin) m=calibrate(by hand)
                    +/-=speed p/P=Kp d/D=Kd k=print calibration
                    l=toggle position stream
+                   b=cycle branch priority (LEFT/RIGHT/NEAREST)
+                   w=cycle line colour (AUTO/BLACK/WHITE)
   ============================================================
 */
 
@@ -58,17 +60,17 @@ const float SENSOR_X[NUM_SENSORS] = {
   60.24f, 50.24f, 40.24f, 30.24f, 22.62f, 12.62f, 5.0f,
   -5.0f, -12.62f, -22.62f, -30.24f, -40.24f, -50.24f, -60.24f
 };
-// D1 (S0) and D9 (S8) read ~0 even on black (suspected open RD1 / RD9).
-// Set back to false once the hardware is repaired.
+// Set a sensor to true to exclude it (e.g. a faulty channel).
+// D1 (S0) and D9 (S8) were faulty until RD1 / RD9 were re-soldered (2026-10-08).
 const bool SENSOR_DEAD[NUM_SENSORS] = {
-  true, false, false, false, false, false, false,
-  false, true, false, false, false, false, false
+  false, false, false, false, false, false, false,
+  false, false, false, false, false, false, false
 };
 
-const bool BLACK_LINE = true;          // black line on white floor
 const unsigned int MUX_SETTLE_US = 10; // measured: settles to 1-3 counts
 const int NOISE_FLOOR = 250;           // ignore bottom 25% (outer sensors sit above white)
 const int ON_LINE_LEVEL = 400;         // any sensor above this = line seen
+const int SEGMENT_LEVEL = 100;         // neighbouring sensors above this form one line segment
 const float LOST_POS = 60.0f;          // mm reported while line is lost
 const unsigned long CAL_MS = 8000;
 
@@ -82,9 +84,25 @@ const int RECOVER_REV = -25;           // lost line: inner wheel
 
 // -------- Tunable parameters (menu / serial) ----------------
 int   baseSpeed = 100;   // cruise PWM (+/- 5)
-float Kp = 6.5f;         // PWM per mm of error (+/- 0.1)
+float Kp = 3.5f;         // PWM per mm of error (+/- 0.1); 6.5 overshot on track
 float Ki = 0.0f;
-float Kd = 43.0f;        // PWM per mm of change over 10 ms (+/- 1)
+float Kd = 30.0f;        // PWM per mm of change over 10 ms (+/- 1)
+
+// Which line to follow when 2+ segments are under the array (junctions, tight S-bends)
+enum BranchMode { BRANCH_LEFT, BRANCH_RIGHT, BRANCH_NEAREST };
+BranchMode branchMode = BRANCH_NEAREST;  // keeps straight through 3-way splits
+const char *BRANCH_NAMES[] = {"LEFT", "RIGHT", "NEAREST"};
+
+// Line colour. AUTO switches to white-line-on-black when most sensors see black
+// AND some see white; a solid black area (start box, crossing bar) has no white
+// and does not switch it.
+enum LineMode { LINE_AUTO, LINE_BLACK, LINE_WHITE };
+LineMode lineMode = LINE_AUTO;
+const char *LINE_NAMES[] = {"AUTO", "BLACK", "WHITE"};
+const int INVERT_ENTER_BLACK = 10;     // >= this many black sensors -> white line on black
+const int INVERT_EXIT_BLACK = 5;       // <= this many black sensors -> black line on white
+const uint8_t INVERT_CONFIRM = 8;      // consecutive reads that must agree before switching
+bool whiteLine = false;                // current detected colour
 
 // -------- Sensor state --------------------------------------
 uint16_t calMin[NUM_SENSORS], calMax[NUM_SENSORS];
@@ -178,31 +196,80 @@ uint16_t readSensorRaw(int i) {
 // ============================================================
 // Reads all sensors (~0.3 ms), normalises each to 0..1000 with the
 // noise floor removed, and updates linePos (mm) and onLine.
-void readLine() {
-  float sumW = 0, sumWX = 0;
-  onLine = false;
+// If more than one line segment is under the array, only the one picked
+// by branchMode is used, instead of averaging onto the white between them.
+void updateLineColour(int blackCount, int whiteCount) {
+  if (lineMode != LINE_AUTO) {
+    whiteLine = (lineMode == LINE_WHITE);
+    return;
+  }
+  static uint8_t votes = 0;
+  bool want = whiteLine;
+  if (whiteCount > 0) {
+    if (!whiteLine && blackCount >= INVERT_ENTER_BLACK) want = true;
+    if (whiteLine && blackCount <= INVERT_EXIT_BLACK) want = false;
+  }
+  if (want != whiteLine && ++votes >= INVERT_CONFIRM) {
+    whiteLine = want;
+    votes = 0;
+  } else if (want == whiteLine) {
+    votes = 0;
+  }
+}
 
+void readLine() {
+  // Pass 1: 0..1000 where 1000 = black floor, count black / white sensors
+  int blackCount = 0, whiteCount = 0;
   for (int i = 0; i < NUM_SENSORS; i++) {
     uint16_t raw = readSensorRaw(i);
     if (SENSOR_DEAD[i]) {
       sensorValue[i] = 0;
       continue;
     }
-
     int range = max(1, (int)calMax[i] - (int)calMin[i]);
-    int v = ((int)raw - (int)calMin[i]) * 1000 / range;
-    if (!BLACK_LINE) v = 1000 - v;
-    v = constrain(v, 0, 1000);
-    v = constrain((v - NOISE_FLOOR) * 1000 / (1000 - NOISE_FLOOR), 0, 1000);
-
+    int v = constrain(((int)raw - (int)calMin[i]) * 1000 / range, 0, 1000);
     sensorValue[i] = v;
-    if (v > ON_LINE_LEVEL) onLine = true;
-    sumW += v;
-    sumWX += v * SENSOR_X[i];
+    if (v > 600) blackCount++;
+    else if (v < 300) whiteCount++;
+  }
+  updateLineColour(blackCount, whiteCount);
+
+  // Pass 2: 1000 = line colour, noise floor removed
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (SENSOR_DEAD[i]) continue;
+    int v = whiteLine ? 1000 - sensorValue[i] : sensorValue[i];
+    sensorValue[i] = constrain((v - NOISE_FLOOR) * 1000 / (1000 - NOISE_FLOOR), 0, 1000);
+  }
+
+  // Segments are scanned left (index 0) to right. A disabled sensor does not
+  // split a segment. A segment counts as a line only if it has a sensor above
+  // ON_LINE_LEVEL.
+  float sumW = 0, sumWX = 0, bestPos = 0;
+  int peak = 0;
+  onLine = false;
+  for (int i = 0; i <= NUM_SENSORS; i++) {
+    bool inSegment = i < NUM_SENSORS &&
+                     (SENSOR_DEAD[i] ? sumW > 0 : sensorValue[i] > SEGMENT_LEVEL);
+    if (inSegment) {
+      sumW += sensorValue[i];
+      sumWX += sensorValue[i] * SENSOR_X[i];
+      peak = max(peak, (int)sensorValue[i]);
+      continue;
+    }
+    if (sumW > 0 && peak > ON_LINE_LEVEL) {
+      float pos = sumWX / sumW;
+      bool take = !onLine ||                                   // first segment found
+                  branchMode == BRANCH_RIGHT ||                // keep the right-most
+                  (branchMode == BRANCH_NEAREST && fabsf(pos - linePos) < fabsf(bestPos - linePos));
+      if (take) bestPos = pos;
+      onLine = true;
+    }
+    sumW = sumWX = 0;
+    peak = 0;
   }
 
   if (onLine) {
-    linePos = sumWX / sumW;
+    linePos = bestPos;
   } else {
     // Report full deflection on the side the line was last seen
     linePos = (prevError >= 0) ? LOST_POS : -LOST_POS;
@@ -372,7 +439,8 @@ void adjustParam(int param, int dir) {
 }
 
 void printParams() {
-  Serial.println("Speed=" + String(baseSpeed) + " | Kp=" + String(Kp, 1) + " | Kd=" + String(Kd, 0));
+  Serial.println("Speed=" + String(baseSpeed) + " | Kp=" + String(Kp, 1) + " | Kd=" + String(Kd, 0) +
+                 " | Branch=" + BRANCH_NAMES[branchMode] + " | Line=" + LINE_NAMES[lineMode]);
 }
 
 // ============================================================
@@ -429,7 +497,8 @@ void drawRunning() {
   u8g2.drawStr(0, 10, buf);
   snprintf(buf, sizeof(buf), "Kp:%s Kd:%s", String(Kp, 1).c_str(), String(Kd, 0).c_str());
   u8g2.drawStr(0, 21, buf);
-  u8g2.drawStr(0, 32, "B5/C13: STOP");
+  snprintf(buf, sizeof(buf), "Branch:%s  B5:STOP", BRANCH_NAMES[branchMode]);
+  u8g2.drawStr(0, 32, buf);
   u8g2.sendBuffer();
 }
 
@@ -438,8 +507,9 @@ void drawSensorTest() {
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_5x7_tr);
   char buf[32];
-  if (onLine) snprintf(buf, sizeof(buf), "POS:%+6.1fmm  B5:EXIT", linePos);
-  else        snprintf(buf, sizeof(buf), "POS: LOST     B5:EXIT");
+  const char *col = whiteLine ? "WHT" : "BLK";
+  if (onLine) snprintf(buf, sizeof(buf), "POS:%+6.1f %s B5:EXIT", linePos, col);
+  else        snprintf(buf, sizeof(buf), "POS: LOST  %s B5:EXIT", col);
   u8g2.drawStr(0, 7, buf);
 
   for (int i = 0; i < NUM_SENSORS; i++) {
@@ -507,6 +577,8 @@ void handleSerial() {
     case 'P': adjustParam(MENU_KP, -1); printParams(); break;
     case 'd': adjustParam(MENU_KD, +1); printParams(); break;
     case 'D': adjustParam(MENU_KD, -1); printParams(); break;
+    case 'w': lineMode = (LineMode)((lineMode + 1) % 3); printParams(); break;
+    case 'b': branchMode = (BranchMode)((branchMode + 1) % 3); printParams(); break;
   }
 }
 
@@ -517,8 +589,8 @@ void streamPos() {
   last = millis();
   readLine();
   char buf[160];
-  int n = onLine ? snprintf(buf, sizeof(buf), "POS,%lu,%.2f", last, linePos)
-                 : snprintf(buf, sizeof(buf), "POS,%lu,lost", last);
+  int n = onLine ? snprintf(buf, sizeof(buf), "POS,%lu,%.2f,%c", last, linePos, whiteLine ? 'W' : 'B')
+                 : snprintf(buf, sizeof(buf), "POS,%lu,lost,%c", last, whiteLine ? 'W' : 'B');
   for (int i = 0; i < NUM_SENSORS; i++) {
     n += snprintf(buf + n, sizeof(buf) - n, ",%d", sensorValue[i]);
   }
@@ -635,8 +707,8 @@ void loop() {
       if (millis() - lastLog >= 100) {
         lastLog = millis();
         char buf[80];
-        if (onLine) snprintf(buf, sizeof(buf), "RUN pos:%+6.1f spd:%3d L:%4d R:%4d", linePos, currentSpeed, lsp, rsp);
-        else        snprintf(buf, sizeof(buf), "RUN pos: LOST  spd:%3d L:%4d R:%4d", currentSpeed, lsp, rsp);
+        if (onLine) snprintf(buf, sizeof(buf), "RUN pos:%+6.1f %s spd:%3d L:%4d R:%4d", linePos, whiteLine ? "WHT" : "BLK", currentSpeed, lsp, rsp);
+        else        snprintf(buf, sizeof(buf), "RUN pos: LOST  %s spd:%3d L:%4d R:%4d", whiteLine ? "WHT" : "BLK", currentSpeed, lsp, rsp);
         Serial.println(buf);
       }
       break;

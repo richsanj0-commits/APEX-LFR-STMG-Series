@@ -112,8 +112,8 @@ const float sensorX[14] = {
 };
 // D1 (S0) and D9 (S8) read ~0 on black: suspected open pull-up RD1 / RD9.
 // Set back to false once repaired.
-const bool sensorDead[14] = { true, false, false, false, false, false, false,
-                              false, true, false, false, false, false, false };
+const bool sensorDead[14] = { false, false, false, false, false, false, false,
+                              false, false, false, false, false, false, false };
 const int   NOISE_FLOOR = 250;    // per-mille of white..black ignored (outer sensors sit 10-25% above white)
 const int   ON_LINE_LEVEL = 400;  // a sensor above this (after floor) means the line is seen
 const float LOST_POS = 60.0f;     // error held while the line is lost (mm)

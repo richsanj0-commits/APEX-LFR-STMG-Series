@@ -177,8 +177,11 @@ Single-file firmware built from the bench measurements, with the same 4-button O
 * Fast ADC read (~3 µs instead of 158 µs for `analogRead()`), correct MUX order (I7 skipped), all 14 sensors in ~0.3 ms.
 * Line position in **mm** from the real PCB sensor positions, using calibrated 0–1000 values with a 25% noise floor.
 * Fixed 1 kHz PID loop; D measured per 10 ms so gains don't depend on loop rate.
-* Faulty sensors D1 (S0) and D9 (S8) are disabled with the `SENSOR_DEAD` table.
-* Serial commands (115200): `r` run, `x` stop, `c` calibrate (spin), `m` calibrate by hand, `+/-` speed, `p/P` Kp, `d/D` Kd, `k` print calibration, `l` position stream.
+* All 14 sensors active (D1/D9 repaired); any channel can be excluded with the `SENSOR_DEAD` table.
+* **Multiple lines under the array** (junctions, 3-way splits, tight S-bends) are split into segments and only one is followed, by default the one **nearest** the previous position (goes straight through 3-way splits). Serial `b` cycles NEAREST / LEFT / RIGHT.
+* **Automatic line colour**: switches to white-line-on-black when ≥10 sensors see black and some see white (a solid black box or crossing bar does not trigger it). Serial `w` cycles AUTO / BLACK / WHITE.
+* Default gains Kp = 3.5, Kd = 30 (Kp 6.5 overshot on the track).
+* Serial commands (115200): `r` run, `x` stop, `c` calibrate (spin), `m` calibrate by hand, `+/-` speed, `p/P` Kp, `d/D` Kd, `k` print calibration, `l` position stream, `b` branch rule, `w` line colour.
 
 ### `sensor_14array_test` (14-Sensor Bench Diagnostics)
 Test sketch used for the bench measurements. Adds serial diagnostics on top of the menu: `a` raw stream, `n` noise / MUX-settle test, `k` calibration dump, `l` position stream, `m` hand calibration.
