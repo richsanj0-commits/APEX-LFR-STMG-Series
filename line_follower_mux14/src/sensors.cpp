@@ -26,13 +26,17 @@ void sensors_init() {
   }
 }
 
+// Sensor index (0 = D1, left-most) -> MUX input. I7 and I15 are unconnected on the PCB.
+static const uint8_t mux_channel[14] = {0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14};
+
 void sensors_read_raw() {
   for (int i = 0; i < 14; i++) {
     // Set MUX selection pins
-    digitalWrite(MUX_S0, i & 0x01);
-    digitalWrite(MUX_S1, (i >> 1) & 0x01);
-    digitalWrite(MUX_S2, (i >> 2) & 0x01);
-    digitalWrite(MUX_S3, (i >> 3) & 0x01);
+    uint8_t ch = mux_channel[i];
+    digitalWrite(MUX_S0, ch & 0x01);
+    digitalWrite(MUX_S1, (ch >> 1) & 0x01);
+    digitalWrite(MUX_S2, (ch >> 2) & 0x01);
+    digitalWrite(MUX_S3, (ch >> 3) & 0x01);
     
     // Give MUX and ADC capacitor more time to switch and settle
     delayMicroseconds(50); 

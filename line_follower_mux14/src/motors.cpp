@@ -37,16 +37,16 @@ void motor_left(int speed) {
 
 void motor_right(int speed) {
   // The right motor is physically connected to the A pins.
-  // AIN1=HIGH, AIN2=LOW drives it FORWARD.
+  // Inverted: AIN1=LOW, AIN2=HIGH drives it FORWARD.
   speed = constrain(speed, -255, 255);
   
   if (speed > 0) {
-    digitalWrite(AIN1, HIGH);
-    digitalWrite(AIN2, LOW);
-    analogWrite(PWMA, speed);
-  } else if (speed < 0) {
     digitalWrite(AIN1, LOW);
     digitalWrite(AIN2, HIGH);
+    analogWrite(PWMA, speed);
+  } else if (speed < 0) {
+    digitalWrite(AIN1, HIGH);
+    digitalWrite(AIN2, LOW);
     analogWrite(PWMA, -speed);
   } else {
     digitalWrite(AIN1, HIGH);

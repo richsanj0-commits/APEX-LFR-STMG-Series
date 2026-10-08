@@ -170,7 +170,23 @@ Quick lookup for the **STM32G431CB** 48-pin package:
 
 ## 📦 Subprojects in this Repository
 
-### Project A: `line_follower_mux14` (Main Race Firmware)
+> 📋 **Bench test results, sensor layout and known hardware faults:** see [`docs/BENCH_FINDINGS.md`](docs/BENCH_FINDINGS.md).
+
+### `apex_lfr` (Current Firmware: analog mm-position PID)
+Single-file firmware built from the bench measurements, with the same 4-button OLED menu (Run, Calibrate, Speed, Kp, Kd, Sensor Test):
+* Fast ADC read (~3 µs instead of 158 µs for `analogRead()`), correct MUX order (I7 skipped), all 14 sensors in ~0.3 ms.
+* Line position in **mm** from the real PCB sensor positions, using calibrated 0–1000 values with a 25% noise floor.
+* Fixed 1 kHz PID loop; D measured per 10 ms so gains don't depend on loop rate.
+* Faulty sensors D1 (S0) and D9 (S8) are disabled with the `SENSOR_DEAD` table.
+* Serial commands (115200): `r` run, `x` stop, `c` calibrate (spin), `m` calibrate by hand, `+/-` speed, `p/P` Kp, `d/D` Kd, `k` print calibration, `l` position stream.
+
+### `sensor_14array_test` (14-Sensor Bench Diagnostics)
+Test sketch used for the bench measurements. Adds serial diagnostics on top of the menu: `a` raw stream, `n` noise / MUX-settle test, `k` calibration dump, `l` position stream, `m` hand calibration.
+
+### `sensor_resolution_test` (8-Sensor ADC Resolution Analyzer)
+Older 8-sensor tool for measuring per-sensor contrast, noise and quality.
+
+### Project A: `line_follower_mux14` (Original Race Firmware)
 The complete competitive firmware running the robot during trials and races:
 * **`src/sensors.cpp`**: Controls CD74HC4067 address cycling, dynamic threshold calculation, and weighted error calculation.
 * **`src/follower.cpp`**: Core PID control loop with anti-windup, derivative filtering, dynamic base-speed corner braking, and edge-recovery spin.
